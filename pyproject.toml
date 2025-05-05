@@ -5,7 +5,9 @@ description = "Source seeking and optimization of swarm algorithms for multi-age
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "ffmpeg-python>=0.2.0",
     "matplotlib>=3.10.1",
     "numpy>=2.2.5",
     "ruff>=0.11.8",
+    "seaborn>=0.13.2",
 ]

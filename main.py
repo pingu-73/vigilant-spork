@@ -215,8 +215,10 @@ class ARPSO:
 
     def calculate_c3(self, positions, obstacles):
         c3 = np.zeros(self.num_particles)
+
+        # using only the first 2 dimensions for obstacle avoidance
         for i, pos in enumerate(positions):
-            distance_to_obstacles = np.linalg.norm(obstacles - pos, axis=1)
+            distance_to_obstacles = np.linalg.norm(obstacles - pos[:2], axis=1)
             if np.any(distance_to_obstacles < self.sensing_radius):
                 c3[i] = 2 * self.c1 + self.c2
         return c3
