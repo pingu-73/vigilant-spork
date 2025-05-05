@@ -10,7 +10,7 @@
 \usepackage{hyperref}
 \usetheme{Boadilla}
 \usepackage{cite}
-\usepackage{media9}
+\usepackage{animate}
 
 \definecolor{mypurple}{RGB}{71, 71, 187}
 \definecolor{subpurple}{RGB}{133, 133, 208}
@@ -124,19 +124,19 @@
         \centering
         \begin{subfigure}[b]{0.32\textwidth}
             \centering
-            \includegraphics[width=\textwidth]{plots/r2_without_noise/iterations_vs_#UAVs.png}
+            \includegraphics[width=\textwidth]{../plots/r2_without_noise/iterations_vs_#UAVs.png}
             \caption{iterations vs No. of UAV's}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.32\textwidth}
             \centering
-            \includegraphics[width=\textwidth]{plots/r2_without_noise/distance_vs_#UAVs.png}
+            \includegraphics[width=\textwidth]{../plots/r2_without_noise/distance_vs_#UAVs.png}
             \caption{Distance vs No. of UAV's}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.32\textwidth}
             \centering
-            \includegraphics[width=\textwidth]{plots/r2_without_noise/convergence_analysis.png}
+            \includegraphics[width=\textwidth]{../plots/r2_without_noise/convergence_analysis.png}
             \caption{Convergence analysis}
         \end{subfigure}
         \caption{Source Seeking without Noise}
@@ -149,19 +149,19 @@
         \centering
         \begin{subfigure}[b]{0.32\textwidth}
             \centering
-            \includegraphics[width=\textwidth]{plots/r1_with_noise/avg_iterations_vs_noise.png}
+            \includegraphics[width=\textwidth]{../plots/r1_with_noise/avg_iterations_vs_noise.png}
             \caption{iterations vs Noise}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.32\textwidth}
             \centering
-            \includegraphics[width=\textwidth]{plots/r1_with_noise/avg_distance_vs_noise.png}
+            \includegraphics[width=\textwidth]{../plots/r1_with_noise/avg_distance_vs_noise.png}
             \caption{Distance vs Noise}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.32\textwidth}
             \centering
-            \includegraphics[width=\textwidth]{plots/r1_with_noise/convergence_analysis.png}
+            \includegraphics[width=\textwidth]{../plots/r1_with_noise/convergence_analysis.png}
             \caption{Convergence analysis}
         \end{subfigure}
         \caption{Source Seeking with Noise for 30 UAV's}
@@ -225,27 +225,27 @@
         \centering
         % First row
         \begin{subfigure}[b]{0.19\textwidth}
-            \includegraphics[width=\textwidth]{plots/cec_bench/function_surface_f1.png}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/function_surface_f1.png}
             \caption*{F1}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.19\textwidth}
-            \includegraphics[width=\textwidth]{plots/cec_bench/function_surface_f2.png}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/function_surface_f2.png}
             \caption*{F2}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.19\textwidth}
-            \includegraphics[width=\textwidth]{plots/cec_bench/function_surface_f3.png}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/function_surface_f3.png}
             \caption*{F3}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.19\textwidth}
-            \includegraphics[width=\textwidth]{plots/cec_bench/function_surface_f4.png}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/function_surface_f4.png}
             \caption*{F4}
         \end{subfigure}
         \hfill
         \begin{subfigure}[b]{0.19\textwidth}
-            \includegraphics[width=\textwidth]{plots/cec_bench/function_surface_f5.png}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/function_surface_f5.png}
             \caption*{F5}
         \end{subfigure}
         \vspace{-1ex}
@@ -255,21 +255,81 @@
 
 % % % % ------------------------ APSO Optimization ------------------------
 \begin{frame}{APSO Optimization Visulization}
-
+    \centering
+    \begin{figure}
+        \centering
+        % First row
+        \begin{subfigure}[b]{0.20\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/radar_chart.png}
+            \caption*{PSO's Performance across functions}
+        \end{subfigure}
+        % \hfill
+        \begin{subfigure}[b]{0.34\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/performance_heatmap.png}
+            \caption*{Relative Performance Across function}
+        \end{subfigure}
+        \vspace{-1ex}
+        \caption*{\scriptsize Performance Matrix}
+    \end{figure}
+    
+    \vspace{-1ex}
+    {\scriptsize For 2D,3D visualization of APSO optimization on Functions, visit: 
+    \href{https://github.com/pingu-73/vigilant-spork/tree/main/plots/cec_bench/gifs}{\textcolor{blue}{@pingu-73/vigilant-spork/../gifs}}}
 \end{frame}
 
-% % % % ------------------------ Remaining Work  ------------------------
-\begin{frame}{Progress}
-    \color{mypurple}\textbf{Completed Tasks}:\\
-    \color{black}
+\begin{frame}
+    \centering
+    \begin{figure}
+        \centering
+        % First row
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/cec_convergence_f1.png}
+            \caption*{F1 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/cec_convergence_f2.png}
+            \caption*{F2 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/cec_convergence_f3.png}
+            \caption*{F3 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/cec_convergence_f4.png}
+            \caption*{F4 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/cec_bench/cec_convergence_f5.png}
+            \caption*{F5 convergence}
+        \end{subfigure}
+        \vspace{-1ex}
+        \caption*{\scriptsize Convergence Plots}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Observations}
     \begin{itemize}
-        \item Implemented PSO, APSO, ARPSO, SPSO
-        \item Implemented metrics for the performance comparison of source-seeking algorithms
-        \item Implemented Benchmark Functions for comparing source-seeking algorithms
+        \item \textbf{SPSO performs best overall:} The radar chart and numerical results show SPSO generally finding better solutions (lower values) across most functions, particularly on F1, F3, F4, and F5.
+        \item \textbf{APSO shows mixed performance:} It performs well on some functions (F2, F4) but struggles with others (F1, F5), showing higher variability (larger standard deviations).
+        \item \textbf{ARPSO consistently underperforms:} It generally finds worse solutions than the other algorithms, especially on F3 and F4, which matches its design as prioritizing exploration over exploitation.
     \end{itemize}
-    
-    \color{mypurple}\textbf{Remaining Work}:\\
-    \color{black}Assign varying numbers of UAVs to different PSO variants (SPSO, ARPSO, APSO) and evaluate their ability to locate the same source.
+\end{frame}
+\begin{frame}{Continued}
+    \begin{itemize}
+        \item \textbf{F1 (Zakharov Function)}
+        \begin{itemize}
+            \item SPSO performs best, APSO shows high variability
+            \item The convergence plot shows SPSO eventually finding better solutions after 150+ iterations
+            \item \textbf{Zakharov relatively smooth but has interdependent variables. APSO's momentum can sometimes overshoot, explaining its variability, while SPSO's balanced approach works well.}
+        \end{itemize}
+        \item \textbf{APSO:} faster initial convergence (F2, F4) but plateaus earlier. This matches its acceleration based design , momentum helps it make quick progress but make fine adjustments difficult.
+        \item \textbf{SPSO:} steady, consistent improvement and achieves the best final solutions (F1, F3, F5). Its balanced approach allows it to both explore broadly and refine solutions effectively.
+        \item \textbf{ARPSO:} plateaus early (F3, F4) but occasionally shows late improvements (F1). The added randomness helps it escape local optima but can prevent focused exploitation.
+    \end{itemize}
 \end{frame}
 
 % % % % ------------------------ Refrence ------------------------
