@@ -71,6 +71,14 @@ class APSO_CEC(APSO):
             position_history.append(positions.copy())
 
         return g_position, g_fitness, fitness_history, position_history
+    
+    def update_global_best(self, position, fitness):
+        if not hasattr(self, 'g_position') or not hasattr(self, 'g_fitness'):
+            self.g_position = position.copy()
+            self.g_fitness = fitness
+        elif fitness < self.g_fitness:
+            self.g_position = position.copy()
+            self.g_fitness = fitness
 
 
 class SPSO_CEC(SPSO):
@@ -131,6 +139,14 @@ class SPSO_CEC(SPSO):
             position_history.append(positions.copy())
 
         return g_position, g_fitness, fitness_history, position_history
+    
+    def update_global_best(self, position, fitness):
+        if not hasattr(self, 'g_position'):
+            self.g_position = position.copy()
+            self.g_fitness = fitness
+        elif fitness < self.g_fitness:
+            self.g_position = position.copy()
+            self.g_fitness = fitness
 
 
 class ARPSO_CEC(ARPSO):
@@ -213,6 +229,14 @@ class ARPSO_CEC(ARPSO):
             position_history.append(positions.copy())
 
         return g_position, g_fitness, fitness_history, position_history
+    
+    def update_global_best(self, position, fitness):
+        if not hasattr(self, 'g_position'):
+            self.g_position = position.copy()
+            self.g_fitness = fitness
+        elif fitness < self.g_fitness:
+            self.g_position = position.copy()
+            self.g_fitness = fitness
 
 
 def benchmark_on_cec(
