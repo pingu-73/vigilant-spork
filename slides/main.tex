@@ -331,6 +331,117 @@
         \item \textbf{ARPSO:} plateaus early (F3, F4) but occasionally shows late improvements (F1). The added randomness helps it escape local optima but can prevent focused exploitation.
     \end{itemize}
 \end{frame}
+\begin{frame}{Summary}
+    \begin{itemize}
+        \item Each PSO's performance is strongly influenced by how well its movement dynamics match the characteristics of the fitness landscape.
+        \item APSO's acceleration-based approach provides smoother trajectories but at the cost of adaptability in complex landscapes.
+        \item SPSO maintains the best balance for these benchmark functions, while APSO tends toward exploitation and ARPSO toward exploration.
+        \item The PSO shows complementary strengths that could potentially be combined in hybrid approaches using APSO's momentum for initial exploration and SPSO's adaptability for final refinement.
+    \end{itemize}
+\end{frame}
+
+% % % % ------------------------ Exploration Based approaches ------------------------
+\begin{frame}{Exploitation/Hybrid Approach}
+    \textbf{Hybrid approaches used:}
+    \begin{itemize}
+        \item \textbf{Particle Hybrid}
+        \begin{itemize}
+            \item Different particles within the same swarm use different update rules
+            \item The swarm is divided into 3 groups of 10 particles each
+            \item Group1: APSO, Group2: SPSO, Group3: ARPSO
+            \item All particles share information about global best position
+        \end{itemize}
+        
+        \item \textbf{Sequential Hybrid}
+        \begin{itemize}
+            \item Different algorithms used in sequence, with one algorithm taking over where the previous left off.
+            \item The swarm is divided into 3 groups of 10 particles each
+            \item Phase 1: APSO runs for 40\% of total iterations
+            \item Phase 2: SPSO is initialized around APSO's final solution and runs for 60\% of iterations
+            \item The best solution from APSO is used as a starting point for SPSO
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Cont...}
+    \begin{itemize}
+        \item \textbf{Parallel Hybrid}
+        \begin{itemize}
+            \item Multiple algorithms run simultaneously on separate sub-swarms and share information.
+            \item Three separate swarms run in parallel (10 particles each)
+            \item Swarm1: APSO, Swarm2: SPSO, Swarm3: ARPSO
+            \item After each iteration, the best solution across all swarms is shared with all algorithms
+        \end{itemize}
+
+        \item \textbf{Adaptive Hybrid}
+        \begin{itemize}
+            \item Dynamically switches between algorithms based on their recent performance.
+            \item Maintains three algorithm instances (APSO, SPSO, ARPSO)
+            \item Starts with APSO, Every 10 iterations, evaluates which algorithm has made the most improvement
+            \item Switches to the best performing algorithm for the next 10 iterations, all algorithms share the same global best information
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \centering
+    \begin{figure}
+        \centering
+        % First row
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/exploitation/hybrid_convergence_f1.png}
+            \caption*{F1 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/exploitation/hybrid_convergence_f2.png}
+            \caption*{F2 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/exploitation/hybrid_convergence_f3.png}
+            \caption*{F3 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/exploitation/hybrid_convergence_f4.png}
+            \caption*{F4 convergence}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}[b]{0.19\textwidth}
+            \includegraphics[width=\textwidth]{../plots/exploitation/hybrid_convergence_f5.png}
+            \caption*{F5 convergence}
+        \end{subfigure}
+        \vspace{-1ex}
+        \caption*{\scriptsize Convergence Plots}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Observations}
+    \begin{itemize}
+        \item \textbf{Anomaly in Sequential\_Hybrid convergence plots}: sudden spike around iteration 75 is due to the transition between APSO and SPSO phases. When SPSO takes over, it's initialized around the APSO solution but with some random perturbation, which temporarily worsen the fitness before improving it.
+    \end{itemize}
+
+    \begin{itemize}
+        \item Particle\_Hybrid performs well overall (avg rank 2.20, 1 win)
+        \item Parallel\_Hybrid is also strong (avg rank 3.20, 2 wins)
+        \item APSO and SPSO tie for third (avg rank 3.60)
+        \item Sequential\_Hybrid is fifth (avg rank 4.00)
+        \item ARPSO is sixth (avg rank 4.80, 1 win)
+        \item Adaptive\_Hybrid performs worst (avg rank 6.60)
+        \item Particle\_Hybrid and Parallel\_Hybrid show the most promise overall, confirming that combining different PSO variants can improve performance.
+    \end{itemize}
+\end{frame}
+
+% % % % ------------------------ Remaining Work ------------------------
+\begin{frame}{Ramining Work}
+\textbf{For stong conclusive results}
+    \begin{itemize}
+        \item Reduce or remove random perturbation from SPSO in the Sequential\_hybrid function
+        \item Do more runs (10-30) as the current 5 runs are not enough for statistical significance.
+    \end{itemize}
+    Codebase: \href{https://github.com/pingu-73/vigilant-spork}{\textcolor{blue}{github.com/pingu-73/vigilant-spork}} \& \href{https://github.com/pingu-73/source-seeking/}{\textcolor{blue}{github.com/pingu-73/source-seeking/}}
+\end{frame}
 
 % % % % ------------------------ Refrence ------------------------
 \begin{frame}{References}
