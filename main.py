@@ -9,7 +9,7 @@ def fitness_signal_strength(pos, src_pos, src_pow=100, a=0.1, noise=0.0):
     return max(0, signal_strength + rnd_noise)
 
 class APSO:
-    def __init__(self, c1=1.193, c2=1.193, w1=0.675, w2=-0.285, num_particles=5, dim=2, max_iter=1000, T=1, threshold=0.1):
+    def __init__(self, c1=1.193, c2=1.193, w1=0.675, w2=-0.285, num_particles=5, dim=2, max_iter=1000, T=1, threshold=0.1, initial_positions=None):
         self.c1 = c1
         self.c2 = c2
         self.w1 = w1
@@ -20,9 +20,17 @@ class APSO:
         self.T = T
         self.threshold_dis = threshold
 
-        self.positions = np.random.uniform(0, 100, (num_particles, dim))
-        self.velocities = np.zeros((num_particles, dim))
-        self.accelerations = np.zeros((num_particles, dim))
+        if initial_positions is not None:
+            self.positions = initial_positions.copy()
+            self.num_particles = initial_positions.shape[0]
+        else:
+            self.num_particles = num_particles
+            self.positions = np.random.uniform(0, 100, (self.num_particles, self.dim))
+        
+        # self.velocities = np.zeros((num_particles, dim))
+        # self.accelerations = np.zeros((num_particles, dim))
+        self.velocities = np.zeros((self.num_particles, self.dim))
+        self.accelerations = np.zeros((self.num_particles, self.dim))
 
     def reset_algorithm_state(self):
         self.positions = np.random.uniform(0, 100, (self.num_particles, self.dim))
@@ -95,7 +103,7 @@ class APSO:
         return self.max_iter, total_distance
 
 class SPSO:
-    def __init__(self, c1=1.193, c2=1.193, w=0.721, num_particles=5, dim=2, max_iter=1000, threshold=0.1):
+    def __init__(self, c1=1.193, c2=1.193, w=0.721, num_particles=5, dim=2, max_iter=1000, threshold=0.1, initial_positions=None):
         self.c1 = c1
         self.c2 = c2
         self.w = w
@@ -104,8 +112,16 @@ class SPSO:
         self.max_iter = max_iter
         self.threshold_dis = threshold
 
-        self.positions = np.random.uniform(0, 100, (num_particles, dim))
-        self.velocities = np.zeros((num_particles, dim))
+        if initial_positions is not None:
+            self.positions = initial_positions.copy()
+            self.num_particles = initial_positions.shape[0]
+            self.dim = initial_positions.shape[1]
+        else:
+            self.num_particles = num_particles
+            self.dim = dim
+            self.positions = np.random.uniform(0, 100, (self.num_particles, self.dim))
+
+        self.velocities = np.zeros((self.num_particles, self.dim))
         self.b_positions = self.positions.copy()
         self.b_scores = np.array([fitness_signal_strength(pos, np.array([80, 34])) for pos in self.positions])
 
@@ -179,7 +195,7 @@ class SPSO:
         return self.max_iter, total_distance
 
 class ARPSO:
-    def __init__(self, c1=1.193, c2=1.193, c3=0, num_particles=5, dim=2, max_iter=1000, threshold=0.1, sensing_radius=10):
+    def __init__(self, c1=1.193, c2=1.193, c3=0, num_particles=5, dim=2, max_iter=1000, threshold=0.1, sensing_radius=10, initial_positions=None):
         self.c1 = c1
         self.c2 = c2
         self.c3 = c3
@@ -189,8 +205,17 @@ class ARPSO:
         self.threshold_dis = threshold
         self.sensing_radius = sensing_radius
 
-        self.positions = np.random.uniform(0, 100, (num_particles, dim))
-        self.velocities = np.zeros((num_particles, dim))
+        if initial_positions is not None:
+            self.positions = initial_positions.copy()
+            self.num_particles = initial_positions.shape[0]
+            self.dim = initial_positions.shape[1]
+        else:
+            self.num_particles = num_particles
+            self.dim = dim
+            self.positions = np.random.uniform(0, 100, (self.num_particles, self.dim))
+
+        # Initialize other attributes based on the final positions
+        self.velocities = np.zeros((self.num_particles, self.dim))
         self.b_positions = self.positions.copy()
         self.b_scores = np.array([fitness_signal_strength(pos, np.array([80, 34])) for pos in self.positions])
 
@@ -472,11 +497,13 @@ print("Iter\t Dist\t\t Iter\t Dist\t\t Iter\t Dist")
 print("----------------------------------------------------------------")
     
 for _ in range(10):
+    common_initial_positions = np.random.uniform(0, 100, (5, 2))
+    
     # Create new instances for each run to ensure independence
-    apso_sim = APSO()
-    spso_sim = SPSO()
-    arpso_sim = ARPSO()
-        
+    apso_sim = APSO(initial_positions=common_initial_positions)
+    spso_sim = SPSO(initial_positions=common_initial_positions)
+    arpso_sim = ARPSO(initial_positions=common_initial_positions)
+    
     iterations_apso, distance_apso = apso_sim.apso()
     iterations_spso, distance_spso = spso_sim.spso()
     iterations_arpso, distance_arpso = arpso_sim.arpso()
@@ -618,9 +645,6 @@ def plot_noise_results(results):
         # plt.savefig(f"./plots/{metric}_vs_noise.png", dpi = 300)
         plt.show()
         plt.close()
-
-
-
 
 noise_results = noise_analysis(
     algorithms={"APSO": apso_sim, "SPSO": spso_sim, "ARPSO": arpso_sim},
