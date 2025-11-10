@@ -6,19 +6,21 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import seaborn as sns
 import os
+import json
 
 from main import APSO, SPSO, ARPSO 
 
 from cec import cec2022_func
 
 
-if not os.path.exists('plots_new'):
-    os.makedirs('plots_new')
+if not os.path.exists('plots_new2'):
+    os.makedirs('plots_new2')
 
 
 class MinimizationAPSO(APSO):
-    def __init__(self, num_particles, max_iter, dim=2):
-        super().__init__(num_particles=num_particles, max_iter=max_iter, dim=dim, initial_positions=None)
+    def __init__(self, num_particles, max_iter, dim=2, w1=0.675, w2=-0.285, c1=1.193, c2=1.193):
+        super().__init__(num_particles=num_particles, max_iter=max_iter, dim=dim, 
+                         w1=w1, w2=w2, c1=c1, c2=c2)
         self.dim = dim
         self.positions = np.zeros((self.num_particles, self.dim))
         self.velocities = np.zeros((self.num_particles, self.dim))
@@ -69,10 +71,10 @@ class MinimizationAPSO(APSO):
         return g_fitness, g_position, convergence_curve, position_history
 
 class MinimizationSPSO(SPSO):
-    def __init__(self, num_particles, max_iter, dim=2):
-        self.c1 = 1.193
-        self.c2 = 1.193
-        self.w = 0.721
+    def __init__(self, num_particles, max_iter, dim=2, w=0.721, c1=1.193, c2=1.193):
+        self.w = w
+        self.c1 = c1
+        self.c2 = c2
         self.num_particles = num_particles
         self.max_iter = max_iter
         self.dim = dim
@@ -165,7 +167,7 @@ def run_benchmark(cec_functions, dimensions, algorithms, num_runs, max_iter, num
     return pd.DataFrame(results_list)
 
 
-def plot_convergence_curves(df, path='plots_new/'):
+def plot_convergence_curves(df, path='plots_new2/'):
     for (func, dim), group in df.groupby(['Function', 'Dimension']):
         plt.figure(figsize=(12, 8))
         
@@ -188,7 +190,7 @@ def plot_convergence_curves(df, path='plots_new/'):
         plt.savefig(f'{path}convergence_{func}_{dim}D.png', dpi=300)
         plt.close()
 
-def plot_boxplots(df, path='plots_new/'):
+def plot_boxplots(df, path='plots_new2/'):
     for dim in df['Dimension'].unique():
         plt.figure(figsize=(16, 10))
         dim_df = df[df['Dimension'] == dim]
@@ -204,7 +206,7 @@ def plot_boxplots(df, path='plots_new/'):
         plt.close()
 
 
-def create_animation(df, func_id, dim, alg_name, path='plots_new/'):
+def create_animation(df, func_id, dim, alg_name, path='plots_new2/'):
     if dim != 2:
         return
 
@@ -253,7 +255,7 @@ def create_animation(df, func_id, dim, alg_name, path='plots_new/'):
 
 
 
-def plot_radar_chart(df, path='plots_new/'):
+def plot_radar_chart(df, path='plots_new2/'):
     for dim in df['Dimension'].unique():
         dim_df = df[df['Dimension'] == dim]
         
@@ -296,14 +298,119 @@ def plot_radar_chart(df, path='plots_new/'):
         except ValueError as e:
             print(f"Could not save static radar chart image. Error: {e}")
 
+
+def tune_hyperparameters(tuning_config):
+    print("--- STARTING HYPERPARAMETER TUNING ---")
+    best_params = {}
+
+    bounds = [-100, 100]
+    
+    tuning_functions = tuning_config['functions']
+    tuning_dims = tuning_config['dims']
+    num_tuning_runs = tuning_config['num_runs']
+    
+    for alg_name, params_to_tune in tuning_config['algorithms'].items():
+        print(f"\n--- Tuning Algorithm: {alg_name} ---")
+        
+        param_names = list(params_to_tune.keys())
+        param_values = list(params_to_tune.values())
+        
+        from itertools import product
+        param_combinations = list(product(*param_values))
+        
+        best_avg_fitness = float('inf')
+        current_best_combo = None
+
+        for combo in param_combinations:
+            current_params = dict(zip(param_names, combo))
+            
+            total_fitness = 0
+            num_evals = 0
+
+            for func_id in tuning_functions:
+                for dim in tuning_dims:
+                    cec_func_obj = cec2022_func(func_num=func_id)
+                    def fitness_wrapper(x):
+                        particle_position = x.reshape(-1, 1)
+                        cec_func_obj.values(particle_position)
+                        return cec_func_obj.ObjFunc[0]
+
+                    alg_class = MinimizationAPSO if alg_name == 'APSO' else MinimizationSPSO
+                    
+                    for _ in range(num_tuning_runs):
+                        algorithm = alg_class(
+                            num_particles=tuning_config['num_particles'],
+                            max_iter=tuning_config['max_iter'],
+                            dim=dim,
+                            **current_params # Unpack the hyperparameter combo
+                        )
+                        
+                        final_fitness, _, _, _ = algorithm.run(fitness_wrapper, dim, bounds)
+                        total_fitness += final_fitness
+                        num_evals += 1
+            
+            avg_fitness = total_fitness / num_evals
+            print(f"  Tested {current_params}, Avg Fitness: {avg_fitness:.4e}")
+
+            if avg_fitness < best_avg_fitness:
+                best_avg_fitness = avg_fitness
+                current_best_combo = current_params
+        
+        best_params[alg_name] = current_best_combo
+        print(f"\n  ==> Best parameters for {alg_name}: {current_best_combo} (Avg Fitness: {best_avg_fitness:.4e})")
+
+    print("\n--- HYPERPARAMETER TUNING FINISHED ---")
+    return best_params
+
 if __name__ == "__main__":
+    hyperparams_cache_file = 'best_hyperparams.json'
+    if os.path.exists(hyperparams_cache_file):
+        print(f"--- LOADING tuned hyperparameters from {hyperparams_cache_file} ---")
+        with open(hyperparams_cache_file, 'r') as f:
+            best_hyperparams = json.load(f)
+    else:
+        tuning_config = {
+            'functions': [1, 5, 11],
+            'dims': [10],
+            'num_runs': 3,
+            'num_particles': 30,
+            'max_iter': 200,
+            'algorithms': {
+                'SPSO': {
+                    'w': [0.4, 0.6, 0.721, 0.8],
+                    'c1': [1.193, 1.5, 2.0],
+                    'c2': [1.193, 1.5, 2.0]
+                },
+                'APSO': {
+                    'w1': [0.5, 0.675, 0.8],
+                    'w2': [-0.1, -0.285, -0.4],
+                    'c1': [1.193, 1.5, 2.0],
+                    'c2': [1.193, 1.5, 2.0]
+                }
+            }
+        }
+        
+        best_hyperparams = tune_hyperparameters(tuning_config)
+        print(f"--- SAVING tuned hyperparameters to {hyperparams_cache_file} ---")
+        with open(hyperparams_cache_file, 'w') as f:
+            json.dump(best_hyperparams, f, indent=4)
+
+    print("\nUsing the following hyperparameters for the final benchmark:")
+    print(json.dumps(best_hyperparams, indent=4))
+
+    print("\n--- STARTING FINAL BENCHMARK WITH TUNED PARAMETERS ---")
+    TunedMinimizationAPSO = lambda **kwargs: MinimizationAPSO(**kwargs, **best_hyperparams['APSO'])
+    TunedMinimizationSPSO = lambda **kwargs: MinimizationSPSO(**kwargs, **best_hyperparams['SPSO'])
+
     CEC_FUNCTIONS_TO_TEST = list(range(1, 13)) 
 
     DIMENSIONS_TO_TEST = [2, 10, 20]
     
     ALGORITHMS_TO_COMPARE = {
-        'APSO': MinimizationAPSO,
-        'SPSO': MinimizationSPSO
+        # 'APSO': MinimizationAPSO,
+        # 'SPSO': MinimizationSPSO
+        'APSO_Tuned': TunedMinimizationAPSO,
+        'SPSO_Tuned': TunedMinimizationSPSO
     }
     
     NUM_RUNS = 20
@@ -331,7 +438,7 @@ if __name__ == "__main__":
     plot_boxplots(plotting_df)
     plot_radar_chart(plotting_df)
     
-    print("Plots saved to the 'plots_new' directory.")
+    print("Plots saved to the 'plots_new2' directory.")
 
     print("\nGenerating animations for 2D functions...")
     for func_id in CEC_FUNCTIONS_TO_TEST:

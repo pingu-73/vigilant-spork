@@ -7,7 +7,10 @@ Created on Sat Jan  1 16:49:21 2022
 """
 
 import numpy as np
+import os
 
+_DATA_CACHE = {}
+_CEC_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 INF = 1.0e99
 EPS = 1.0e-14
 E = 2.7182818284590452353602874713526625
@@ -597,142 +600,111 @@ def cf_cal(x, nx, Os, delta, bias, fit, cf_num):
 
 
 def cec22_test_func(x, nx, mx, func_num):
-    global OShift, M, y, z, x_bound, ini_flag, n_flag, func_flag, SS
+    global OShift, M, y, z, x_bound, SS
 
-    OShift = None
-    M = None
-    y = None
-    z = None
-    x_bound = None
-    ini_flag = 0
-    n_flag = None
-    func_flag = None
-    SS = None
-    cf_num = 10
-    if (func_num < 1) | (func_num > 12):
-        print("\nError: Test function %d is not defined.\n" % func_num)
-    if ini_flag == 1:
-        if (n_flag != nx) | (func_flag != func_num):
-            ini_flag = 0
+    cache_key = (func_num, nx)
 
-    if ini_flag == 0:
-        del M
-        del OShift
-        del y
-        del z
-        del x_bound
+    if cache_key in _DATA_CACHE:
+        data = _DATA_CACHE[cache_key]
+        M = data['M']
+        OShift = data['OShift']
+        SS = data.get('SS', None) # Use .get for optional SS
+    else:
+        # Data not in cache, load from disk once
+        # print(f"Cache miss. Loading data for F{func_num}, D{nx} from disk...")
+        
+        # --- File Loading Logic (from your previous version) ---
         y = [0] * nx
         z = [None] * nx
         x_bound = [100.0] * nx
+        cf_num = 10
 
-        if nx != 2 | nx != 10 | nx != 20:
-            print("\nError: Test functions are only defined for D=2,10,20.\n")
+        if nx not in [2, 10, 20]:
+            print(f"\nError: Test function {func_num} is only defined for D=2,10,20. Got D={nx}.\n")
+            return [0.0]
 
-        if (nx == 2) & (func_num == 6 | func_num == 7 | func_num == 8):
-            print("\nError:  NOT defined for D=2.\n")
+        if (nx == 2) and (func_num in [6, 7, 8]):
+            print(f"\nError: Test function {func_num} is NOT defined for D=2.\n")
+            return [0.0]
 
         # Load M matrix
-
-        FileName = "input_data/M_%d_D%d.txt" % (func_num, nx)
+        m_filename = os.path.join(_CEC_FILE_DIR, "input_data", f"M_{func_num}_D{nx}.txt")
         try:
-            M = np.loadtxt(FileName)
-        except:
-            print("\n Error: Cannot open M_%d_D%d.txt for reading \n" % (func_num, nx))
-        #    if M==None:
-        #      print("\nError: there is insufficient memory available!\n")
-        del FileName
+            M = np.loadtxt(m_filename)
+        except Exception as e:
+            print(f"\n Error: Cannot open {m_filename}. Reason: {e} \n")
+            return [0.0]
 
-        # Shift data
-        FileName = "input_data/shift_data_%d.txt" % func_num
+        # Load Shift data
+        shift_filename = os.path.join(_CEC_FILE_DIR, "input_data", f"shift_data_{func_num}.txt")
         try:
-            OShift_temp = np.loadtxt(FileName)
-        except:
-            print("\n Error: Cannot open shift_data_%d.txt for reading \n" % func_num)
-        #    if OShift == None:
-        #      print("\nError: there is insufficient memory available!\n")
-        del FileName
+            OShift_temp = np.loadtxt(shift_filename)
+        except Exception as e:
+            print(f"\n Error: Cannot open {shift_filename}. Reason: {e} \n")
+            return [0.0]
+
         if func_num < 9:
-            OShift = np.zeros((nx,))
-            for i in range(nx):
-                OShift[i] = OShift_temp[i]
+            OShift = OShift_temp[:nx]
         else:
-            OShift = np.zeros((cf_num - 1, nx))
-            for i in range(cf_num - 1):
-                for j in range(nx):
-                    OShift[i, j] = OShift_temp[i, j]
-            OShift = np.reshape(OShift, (cf_num - 1) * nx)
+            # This logic is for composite functions F9-F12
+            OShift = OShift_temp[:cf_num-1, :nx].flatten()
 
-        if (func_num >= 6) & (func_num <= 8):
-            FileName = "input_data/shuffle_data_%d_D%d.txt" % (func_num, nx)
+        # Load Shuffle data (if applicable)
+        SS = None
+        if func_num in [6, 7, 8]:
+            shuffle_filename = os.path.join(_CEC_FILE_DIR, "input_data", f"shuffle_data_{func_num}_D{nx}.txt")
             try:
-                SS = np.loadtxt(FileName)
-            except:
-                print(
-                    "\n Error: Cannot open shuffle_data_%d_D%d.txt for reading \n"
-                    % (func_num, nx)
-                )
+                SS = np.loadtxt(shuffle_filename)
+            except Exception as e:
+                print(f"\n Error: Cannot open {shuffle_filename}. Reason: {e} \n")
+                return [0.0]
+        
+        # --- Store the loaded data in the cache ---
+        _DATA_CACHE[cache_key] = {'M': M, 'OShift': OShift, 'SS': SS}
+        # print(f"Data for F{func_num}, D{nx} cached.")
 
-            del FileName
-
-        n_flag = nx
-        func_flag = func_num
-        ini_flag = 1
-        f = np.zeros((mx,))
-        for i in range(mx):
-            if func_num == 1:
-                ff = zakharov_func(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 300.0
-                break
-            elif func_num == 2:
-                ff = rosenbrock_func(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 400.0
-                break
-            elif func_num == 3:
-                ff = schaffer_F7_func(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 600.0
-                break
-            elif func_num == 4:
-                ff = step_rastrigin_func(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 800.0
-                break
-            elif func_num == 5:
-                ff = levy_func(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 900.0
-                break
-            elif func_num == 6:
-                ff = hf02(x, nx, OShift, M, SS, 1, 1)
-                f[i] = ff + 1800.0
-                break
-            elif func_num == 7:
-                ff = hf10(x, nx, OShift, M, SS, 1, 1)
-                f[i] = ff + 2000.0
-                break
-            elif func_num == 8:
-                ff = hf06(x, nx, OShift, M, SS, 1, 1)
-                f[i] = ff + 2200.0
-                break
-            elif func_num == 9:
-                ff = cf01(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 2300.0
-                break
-            elif func_num == 10:
-                ff = cf02(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 2400.0
-                break
-            elif func_num == 11:
-                ff = cf06(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 2600.0
-                break
-            elif func_num == 12:
-                ff = cf07(x, nx, OShift, M, 1, 1)
-                f[i] = ff + 2700.0
-                break
-            else:
-                print("\nError: There are only 10 test functions in this test suite!\n")
-                f[i] = 0.0
-                break
-
-        return f
+    f = np.zeros((mx,))
+    for i in range(mx):
+        if func_num == 1:
+            ff = zakharov_func(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 300.0
+        elif func_num == 2:
+            ff = rosenbrock_func(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 400.0
+        elif func_num == 3:
+            ff = schaffer_F7_func(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 600.0
+        elif func_num == 4:
+            ff = step_rastrigin_func(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 800.0
+        elif func_num == 5:
+            ff = levy_func(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 900.0
+        elif func_num == 6:
+            ff = hf02(x, nx, OShift, M, SS, 1, 1)
+            f[i] = ff + 1800.0
+        elif func_num == 7:
+            ff = hf10(x, nx, OShift, M, SS, 1, 1)
+            f[i] = ff + 2000.0
+        elif func_num == 8:
+            ff = hf06(x, nx, OShift, M, SS, 1, 1)
+            f[i] = ff + 2200.0
+        elif func_num == 9:
+            ff = cf01(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 2300.0
+        elif func_num == 10:
+            ff = cf02(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 2400.0
+        elif func_num == 11:
+            ff = cf06(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 2600.0
+        elif func_num == 12:
+            ff = cf07(x, nx, OShift, M, 1, 1)
+            f[i] = ff + 2700.0
+        else:
+            print(f"\nError: Test function {func_num} is not defined!\n")
+            f[i] = 0.0
+    return f
 
 
 class cec2022_func:
