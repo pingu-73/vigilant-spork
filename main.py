@@ -27,8 +27,6 @@ class APSO:
             self.num_particles = num_particles
             self.positions = np.random.uniform(0, 100, (self.num_particles, self.dim))
         
-        # self.velocities = np.zeros((num_particles, dim))
-        # self.accelerations = np.zeros((num_particles, dim))
         self.velocities = np.zeros((self.num_particles, self.dim))
         self.accelerations = np.zeros((self.num_particles, self.dim))
 
@@ -61,9 +59,11 @@ class APSO:
         fitness_values = np.array([fitness_signal_strength(pos, src_position) for pos in positions])
         b_positions = positions.copy()
         b_fitness = fitness_values.copy()
+        
         g_index = np.argmax(fitness_values)
         g_position = positions[g_index].copy()
-        
+        g_fitness = fitness_values[g_index]
+
         total_distance = 0
 
         for i in range(self.max_iter):
@@ -77,26 +77,23 @@ class APSO:
             # Calculate new fitness values
             fitness_values = np.array([fitness_signal_strength(pos, src_position) for pos in positions])
 
-            # Update personal best
-            for j in range(self.num_particles):
-                if fitness_values[j] > b_fitness[j]:
-                    b_positions[j] = positions[j].copy()
-                    b_fitness[j] = fitness_values[j]
-            
-            # Update global best
-            if np.max(fitness_values) > fitness_signal_strength(g_position, src_position):
+            update_indices = fitness_values > b_fitness
+            b_positions[update_indices] = positions[update_indices].copy()
+            b_fitness[update_indices] = fitness_values[update_indices]
+
+            current_max_fitness = np.max(fitness_values)
+            if current_max_fitness > g_fitness:
                 g_index = np.argmax(fitness_values)
                 g_position = positions[g_index].copy()
+                g_fitness = current_max_fitness
 
-            # Check if any UAV is close enough to the source
-            if np.min([np.linalg.norm(pos - src_position) for pos in positions]) < self.threshold_dis:
-                # Update class state before returning
+            min_dist = np.min(np.linalg.norm(positions - src_position, axis=1))
+            if min_dist < self.threshold_dis:
                 self.positions = positions
                 self.velocities = velocities
                 self.accelerations = accelerations
                 return i + 1, total_distance
 
-        # Update class state before returning
         self.positions = positions
         self.velocities = velocities
         self.accelerations = accelerations
