@@ -1,16 +1,13 @@
-# modified the code from: https://github.com/P-N-Suganthan/2022-SO-BO
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Jan  1 16:49:21 2022
+
+@author: Abhishek Kumar
+@email: abhishek.kumar.eee13@iitbhu.ac.in
+"""
 
 import numpy as np
 
-OShift = None
-M = None
-y = [0] * 100
-z = [None] * 100
-x_bound = None
-ini_flag = 0
-n_flag = None
-func_flag = None
-SS = None
 INF = 1.0e99
 EPS = 1.0e-14
 E = 2.7182818284590452353602874713526625
@@ -183,22 +180,20 @@ def schaffer_F7_func(x, nx, Os, Mr, s_flag, r_flag):
     f = 0.0
     z = sr_func(x, nx, Os, Mr, 1.0, s_flag, r_flag)
     for i in range(nx - 1):
-        si = pow(z[i] * z[i] + z[i + 1] * z[i + 1], 0.5)
-        tmp = np.sin(50.0 * pow(si, 0.2))
-        f += pow(si, 0.5) + pow(si, 0.5) * tmp * tmp
+        z[i] = pow(y[i] * y[i] + y[i + 1] * y[i + 1], 0.5)
+        tmp = np.sin(50.0 * pow(z[i], 0.2))
+        f += pow(z[i], 0.5) + pow(z[i], 0.5) * tmp * tmp
     f = f * f / (nx - 1) / (nx - 1)
     return f
 
 
 def step_rastrigin_func(x, nx, Os, Mr, s_flag, r_flag):
     f = 0.0
-    x_copy = x.copy()
-
     for i in range(nx):
-        if np.fabs(x_copy[i] - Os[i]) > 0.5:
-            x_copy[i] = Os[i] + np.floor(2 * (x_copy[i] - Os[i]) + 0.5) / 2
+        if np.fabs(y[i] - Os[i]) > 0.5:
+            y[i] = Os[i] + np.floor(2 * (y[i] - Os[i]) + 0.5) / 2
 
-    z = sr_func(x_copy, nx, Os, Mr, 5.12 / 100.0, s_flag, r_flag)
+    z = sr_func(x, nx, Os, Mr, 5.12 / 100.0, s_flag, r_flag)
 
     for i in range(nx):
         f += z[i] * z[i] - 10.0 * np.cos(2.0 * PI * z[i]) + 10.0
@@ -211,7 +206,7 @@ def levy_func(x, nx, Os, Mr, s_flag, r_flag):
 
     w = [1] * nx
 
-    sum1 = 0.0  # noqa: F841
+    sum1 = 0.0
     for i in range(nx):
         w[i] = 1.0 + (z[i] - 0.0) / 4.0
 
@@ -641,7 +636,7 @@ def cec22_test_func(x, nx, mx, func_num):
         FileName = "input_data/M_%d_D%d.txt" % (func_num, nx)
         try:
             M = np.loadtxt(FileName)
-        except:  # noqa: E722
+        except:
             print("\n Error: Cannot open M_%d_D%d.txt for reading \n" % (func_num, nx))
         #    if M==None:
         #      print("\nError: there is insufficient memory available!\n")
@@ -651,7 +646,7 @@ def cec22_test_func(x, nx, mx, func_num):
         FileName = "input_data/shift_data_%d.txt" % func_num
         try:
             OShift_temp = np.loadtxt(FileName)
-        except:  # noqa: E722
+        except:
             print("\n Error: Cannot open shift_data_%d.txt for reading \n" % func_num)
         #    if OShift == None:
         #      print("\nError: there is insufficient memory available!\n")
@@ -671,7 +666,7 @@ def cec22_test_func(x, nx, mx, func_num):
             FileName = "input_data/shuffle_data_%d_D%d.txt" % (func_num, nx)
             try:
                 SS = np.loadtxt(FileName)
-            except:  # noqa: E722
+            except:
                 print(
                     "\n Error: Cannot open shuffle_data_%d_D%d.txt for reading \n"
                     % (func_num, nx)
@@ -752,21 +747,3 @@ class cec2022_func:
         self.ObjFunc = ObjFunc
 
         return self
-
-
-class CEC2022Benchmark:
-    def __init__(self, func_num=1, dim=10):
-        self.func_num = func_num
-        self.dim = dim
-        self.bounds = np.array([[-100, 100]] * dim)
-        
-        global y, z
-        if len(y) < dim:
-            y = [0] * dim
-        if len(z) < dim:
-            z = [None] * dim
-
-    def evaluate(self, x):
-        x = np.array(x)
-        result = cec22_test_func(x, self.dim, 1, self.func_num)
-        return float(result[0])

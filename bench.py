@@ -1,762 +1,338 @@
+# benchmark.py
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from main import APSO, ARPSO, SPSO
-from cec import CEC2022Benchmark
+import pandas as pd
+import seaborn as sns
+import os
+
+# Import your PSO algorithms from main.py
+from main import APSO, SPSO, ARPSO 
+# Import the CEC2022 benchmark functions
+from cec import cec2022_func
+
+# Ensure a 'plots' directory exists
+if not os.path.exists('plots_new'):
+    os.makedirs('plots_new')
 
 
-class APSO_CEC(APSO):
-    def __init__(self, c1=1.193, c2=1.193, w1=0.675, w2=-0.285, num_particles=5, dim=10, max_iter=1000, T=1, threshold=0.1):
-        self.c1 = c1
-        self.c2 = c2
-        self.w1 = w1
-        self.w2 = w2
-        self.num_particles = num_particles
+# --- Adapter Classes for Minimization ---
+class MinimizationAPSO(APSO):
+    def __init__(self, num_particles, max_iter, dim=2):
+        super().__init__(num_particles=num_particles, max_iter=max_iter, dim=dim, initial_positions=None)
         self.dim = dim
-        self.max_iter = max_iter
-        self.T = T
-        self.threshold_dis = threshold
+        self.positions = np.zeros((self.num_particles, self.dim))
+        self.velocities = np.zeros((self.num_particles, self.dim))
+        self.accelerations = np.zeros((self.num_particles, self.dim))
 
-        self.positions = np.random.uniform(-100, 100, (num_particles, dim))
-        self.velocities = np.zeros((num_particles, dim))
-        self.accelerations = np.zeros((num_particles, dim))
-    
+    def run(self, fitness_func, dim, bounds):
+        if self.dim != dim:
+            raise ValueError(f"Object initialized with dim={self.dim} but run with dim={dim}")
+        
+        # Initialize positions within the specified bounds
+        self.positions = np.random.uniform(bounds[0], bounds[1], (self.num_particles, dim))
+        self.velocities.fill(0)
+        self.accelerations.fill(0)
 
-    def optimize(self, benchmark, max_iter=None):
-        if max_iter is None:
-            max_iter = self.max_iter
-
-        # initialize within bounds
-        positions = np.random.uniform(-100, 100, (self.num_particles, self.dim))
-        velocities = np.zeros((self.num_particles, self.dim))
-        accelerations = np.zeros((self.num_particles, self.dim))
-
-        # calculate initial fitness
-        fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
-        b_positions = positions.copy()
+        # Evaluate initial fitness
+        fitness_values = np.array([fitness_func(p) for p in self.positions])
+        
+        b_positions = self.positions.copy()
         b_fitness = fitness_values.copy()
-        g_index = np.argmin(fitness_values)  # CEC functions are minimization
-        g_position = positions[g_index].copy()
+        
+        g_index = np.argmin(fitness_values) # MIN instead of MAX
+        g_position = self.positions[g_index].copy()
         g_fitness = fitness_values[g_index]
 
-        fitness_history = [g_fitness]
-        position_history = [positions.copy()]
+        convergence_curve = [g_fitness]
+        position_history = [self.positions.copy()]
 
-        for i in range(max_iter):
-            # update positions using APSO
-            accelerations = self.update_acceleration(
-                accelerations, positions, b_positions, g_position
-            )
-            velocities = self.update_velocity(velocities, accelerations)
-            positions = self.update_position(positions, velocities)
+        for i in range(self.max_iter):
+            # Update positions
+            self.accelerations = self.update_acceleration(self.accelerations, self.positions, b_positions, g_position)
+            self.velocities = self.update_velocity(self.velocities, self.accelerations)
+            self.positions = self.update_position(self.positions, self.velocities)
+            
+            # Clamp positions to the bounds
+            self.positions = np.clip(self.positions, bounds[0], bounds[1])
 
-            # boundary handling
-            positions = np.clip(positions, -100, 100)
+            fitness_values = np.array([fitness_func(p) for p in self.positions])
 
-            fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
+            # Update personal best (look for smaller values)
+            update_indices = fitness_values < b_fitness # LESS THAN instead of GREATER THAN
+            b_positions[update_indices] = self.positions[update_indices].copy()
+            b_fitness[update_indices] = fitness_values[update_indices]
 
-            # update personal best (for minimization)
-            improved = fitness_values < b_fitness
-            b_positions[improved] = positions[improved].copy()
-            b_fitness[improved] = fitness_values[improved]
+            # Update global best (look for smaller values)
+            current_min_fitness = np.min(fitness_values)
+            if current_min_fitness < g_fitness: # LESS THAN instead of GREATER THAN
+                g_index = np.argmin(fitness_values) # MIN instead of MAX
+                g_position = self.positions[g_index].copy()
+                g_fitness = current_min_fitness
 
-            # update global best
-            min_idx = np.argmin(fitness_values)
-            if fitness_values[min_idx] < g_fitness:
-                g_position = positions[min_idx].copy()
-                g_fitness = fitness_values[min_idx]
+            convergence_curve.append(g_fitness)
+            position_history.append(self.positions.copy())
 
-            fitness_history.append(g_fitness)
-            position_history.append(positions.copy())
+        return g_fitness, g_position, convergence_curve, position_history
 
-        return g_position, g_fitness, fitness_history, position_history
-    
-    def update_global_best(self, position, fitness):
-        if not hasattr(self, 'g_position') or not hasattr(self, 'g_fitness'):
-            self.g_position = position.copy()
-            self.g_fitness = fitness
-        elif fitness < self.g_fitness:
-            self.g_position = position.copy()
-            self.g_fitness = fitness
-
-
-class SPSO_CEC(SPSO):
-    def __init__(self, c1=1.193, c2=1.193, w=0.721, num_particles=5, dim=10, max_iter=1000, threshold=0.1):
-        self.c1 = c1
-        self.c2 = c2
-        self.w = w
+class MinimizationSPSO(SPSO):
+    def __init__(self, num_particles, max_iter, dim=2):
+        self.c1 = 1.193   # same as main.py
+        self.c2 = 1.193   # same as main.py
+        self.w = 0.721    # same as main.py
         self.num_particles = num_particles
-        self.dim = dim
         self.max_iter = max_iter
-        self.threshold_dis = threshold
+        self.dim = dim
+        self.positions = np.zeros((self.num_particles, self.dim))
+        self.velocities = np.zeros((self.num_particles, self.dim))
 
-        self.positions = np.random.uniform(-100, 100, (num_particles, dim))
-        self.velocities = np.zeros((num_particles, dim))
-        self.b_positions = self.positions.copy()
-        self.b_scores = np.full(num_particles, np.inf)  # For minimization
-
-
-    def optimize(self, benchmark, max_iter=None):
-        if max_iter is None:
-            max_iter = self.max_iter
-
-        # initialize within bounds
-        positions = np.random.uniform(-100, 100, (self.num_particles, self.dim))
-        velocities = np.zeros((self.num_particles, self.dim))
-
-        # calculate initial fitness
-        fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
-        b_positions = positions.copy()
+    def run(self, fitness_func, dim, bounds):
+        if self.dim != dim:
+            raise ValueError(f"Object initialized with dim={self.dim} but run with dim={dim}")
+        self.positions = np.random.uniform(bounds[0], bounds[1], (self.num_particles, self.dim))
+        self.velocities.fill(0)
+        
+        fitness_values = np.array([fitness_func(p) for p in self.positions])
+        
+        b_positions = self.positions.copy()
         b_fitness = fitness_values.copy()
-        g_index = np.argmin(fitness_values)  # CEC functions are minimization
-        g_position = positions[g_index].copy()
+        
+        g_index = np.argmin(fitness_values)
+        g_position = self.positions[g_index].copy()
         g_fitness = fitness_values[g_index]
 
-        fitness_history = [g_fitness]
-        position_history = [positions.copy()]
+        convergence_curve = [g_fitness]
+        position_history = [self.positions.copy()]
 
-        for i in range(max_iter):
-            velocities = self.update_velocity(
-                velocities, positions, b_positions, g_position
-            )
-            positions = self.update_positions(velocities, positions)
+        for i in range(self.max_iter):
+            self.velocities = self.update_velocity(self.velocities, self.positions, b_positions, g_position)
+            self.positions = self.update_positions(self.velocities, self.positions)
+            self.positions = np.clip(self.positions, bounds[0], bounds[1])
 
-            positions = np.clip(positions, -100, 100)
+            fitness_values = np.array([fitness_func(p) for p in self.positions])
 
-            fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
+            update_indices = fitness_values < b_fitness
+            b_positions[update_indices] = self.positions[update_indices].copy()
+            b_fitness[update_indices] = fitness_values[update_indices]
 
-            improved = fitness_values < b_fitness
-            b_positions[improved] = positions[improved].copy()
-            b_fitness[improved] = fitness_values[improved]
+            current_min_fitness = np.min(fitness_values)
+            if current_min_fitness < g_fitness:
+                g_index = np.argmin(fitness_values)
+                g_position = self.positions[g_index].copy()
+                g_fitness = current_min_fitness
+            
+            convergence_curve.append(g_fitness)
+            position_history.append(self.positions.copy())
 
-            min_idx = np.argmin(fitness_values)
-            if fitness_values[min_idx] < g_fitness:
-                g_position = positions[min_idx].copy()
-                g_fitness = fitness_values[min_idx]
-
-            fitness_history.append(g_fitness)
-            position_history.append(positions.copy())
-
-        return g_position, g_fitness, fitness_history, position_history
-    
-    def update_global_best(self, position, fitness):
-        if not hasattr(self, 'g_position'):
-            self.g_position = position.copy()
-            self.g_fitness = fitness
-        elif fitness < self.g_fitness:
-            self.g_position = position.copy()
-            self.g_fitness = fitness
+        return g_fitness, g_position, convergence_curve, position_history
 
 
-class ARPSO_CEC(ARPSO):
-    def __init__(self, c1=1.193, c2=1.193, c3=0, num_particles=5, dim=10, max_iter=1000, threshold=0.1, sensing_radius=10):
-        self.c1 = c1
-        self.c2 = c2
-        self.c3 = c3
-        self.num_particles = num_particles
-        self.dim = dim
-        self.max_iter = max_iter
-        self.threshold_dis = threshold
-        self.sensing_radius = sensing_radius
+# In benchmark.py
 
-        self.positions = np.random.uniform(-100, 100, (num_particles, dim))
-        self.velocities = np.zeros((num_particles, dim))
-        self.b_positions = self.positions.copy()
-        self.b_scores = np.full(num_particles, np.inf)  # For minimization
+def run_benchmark(cec_functions, dimensions, algorithms, num_runs, max_iter, num_particles):
+    """
+    Runs the benchmarking experiments and returns the results.
+    """
+    results_list = []
+    bounds = [-100, 100]
 
-    
-    def optimize(self, benchmark, max_iter=None):
-        if max_iter is None:
-            max_iter = self.max_iter
+    for func_id in cec_functions:
+        for dim in dimensions:
+            print(f"--- Testing F{func_id} in {dim}D ---")
+            
+            cec_func_obj = cec2022_func(func_num=func_id)
 
-        # initialize within bounds
-        positions = np.random.uniform(-100, 100, (self.num_particles, self.dim))
-        velocities = np.zeros((self.num_particles, self.dim))
-
-        # initial fitness
-        fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
-        b_positions = positions.copy()
-        b_fitness = fitness_values.copy()
-        g_index = np.argmin(fitness_values)  # CEC functions are minimization
-        g_position = positions[g_index].copy()
-        g_fitness = fitness_values[g_index]
-
-        attractive_position = np.random.uniform(
-            -100, 100, (self.num_particles, self.dim)
-        )
-
-        obstacles = np.array([[0, 0]])
-
-        fitness_history = [g_fitness]
-        position_history = [positions.copy()]
-
-        for i in range(max_iter):
-            # calculate adaptive parameters
-            w = self.calculate_inertia_weight(fitness_values)
-            c3_values = self.calculate_c3(positions, obstacles)
-
-            # update velocities and positions
-            velocities = self.update_velocity(
-                velocities,
-                positions,
-                b_positions,
-                g_position,
-                attractive_position,
-                w,
-                c3_values,
-            )
-            positions = self.update_position(positions, velocities)
-
-            # boundary handling
-            positions = np.clip(positions, -100, 100)
-
-            # evaluate new positions
-            fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
-
-            # update personal best (for minimization)
-            improved = fitness_values < b_fitness
-            b_positions[improved] = positions[improved].copy()
-            b_fitness[improved] = fitness_values[improved]
-
-            # update global best
-            min_idx = np.argmin(fitness_values)
-            if fitness_values[min_idx] < g_fitness:
-                g_position = positions[min_idx].copy()
-                g_fitness = fitness_values[min_idx]
-
-            fitness_history.append(g_fitness)
-            position_history.append(positions.copy())
-
-        return g_position, g_fitness, fitness_history, position_history
-    
-    def update_global_best(self, position, fitness):
-        if not hasattr(self, 'g_position'):
-            self.g_position = position.copy()
-            self.g_fitness = fitness
-        elif fitness < self.g_fitness:
-            self.g_position = position.copy()
-            self.g_fitness = fitness
-
-
-def benchmark_on_cec(
-    algorithms, func_ids=[1, 2, 3, 4, 5], dim=10, runs=10, max_iter=500
-):
-    results = {}
-
-    for func_id in func_ids:
-        print(f"Testing function F{func_id}")
-        benchmark = CEC2022Benchmark(func_num=func_id, dim=dim)
-
-        func_results = {}
-        for alg_name, algorithm in algorithms.items():
-            print(f"  Running {alg_name}...")
-            alg_results = []
-            convergence_data = []
-
-            for run in range(runs):
-                # new instance
-                if alg_name == "APSO":
-                    alg = APSO_CEC(
-                        c1=algorithm.c1,
-                        c2=algorithm.c2,
-                        w1=algorithm.w1,
-                        w2=algorithm.w2,
-                        num_particles=algorithm.num_particles,
-                        dim=dim,
-                        max_iter=max_iter,
-                        T=algorithm.T,
-                    )
-                elif alg_name == "SPSO":
-                    alg = SPSO_CEC(
-                        c1=algorithm.c1,
-                        c2=algorithm.c2,
-                        w=algorithm.w,
-                        num_particles=algorithm.num_particles,
-                        dim=dim,
-                        max_iter=max_iter,
-                    )
-                else:  # ARPSO
-                    alg = ARPSO_CEC(
-                        c1=algorithm.c1,
-                        c2=algorithm.c2,
-                        c3=algorithm.c3,
-                        num_particles=algorithm.num_particles,
-                        dim=dim,
-                        max_iter=max_iter,
-                        sensing_radius=algorithm.sensing_radius,
-                    )
-
-                # Run optimization
-                # if alg_name == "APSO":
-                #     _, best_fitness, history = alg.optimize(benchmark, max_iter)
-                # else:
-                _, best_fitness, history, _ = alg.optimize(benchmark, max_iter)
+            # --- THIS IS THE CORRECTED WRAPPER ---
+            def fitness_wrapper(x):
+                # The cec function expects a shape of (dim, num_particles)
+                # Here, we are evaluating one particle at a time, so shape is (dim, 1)
+                particle_position = x.reshape(-1, 1)
                 
-                alg_results.append(best_fitness)
-                convergence_data.append(history)
+                # Call the values method, which returns the object itself
+                cec_func_obj.values(particle_position)
+                
+                # The result is stored in the ObjFunc attribute
+                return cec_func_obj.ObjFunc[0]
+            # --- END OF CORRECTION ---
 
-                print(f"    Run {run + 1}/{runs}: {best_fitness:.2e}")
+            for alg_name, alg_class in algorithms.items():
+                print(f"  -> Algorithm: {alg_name}")
+                for run in range(num_runs):
+                    print(f"    -> Run: {run + 1}/{num_runs}")
+                    
+                    # algorithm = alg_class(num_particles=num_particles, max_iter=max_iter)
+                    # best_fitness, best_pos, conv_curve, pos_history = algorithm.run(fitness_wrapper, dim, bounds)
+                    algorithm = alg_class(num_particles=num_particles, max_iter=max_iter, dim=dim)
+                    best_fitness, best_pos, conv_curve, pos_history = algorithm.run(fitness_wrapper, dim, bounds)
 
-            func_results[alg_name] = {
-                "mean": np.mean(alg_results),
-                "std": np.std(alg_results),
-                "min": np.min(alg_results),
-                "max": np.max(alg_results),
-                "median": np.median(alg_results),
-                "convergence": np.mean(convergence_data, axis=0),
-                "all_results": alg_results,
-            }
+                    results_list.append({
+                        'Function': f'F{func_id}',
+                        'Dimension': dim,
+                        'Algorithm': alg_name,
+                        'Run': run + 1,
+                        'BestFitness': best_fitness,
+                        'ConvergenceCurve': conv_curve,
+                        'PositionHistory': pos_history
+                    })
 
-            print(
-                f"  {alg_name} results: Mean={func_results[alg_name]['mean']:.2e}, Std={func_results[alg_name]['std']:.2e}"
-            )
-
-        results[func_id] = func_results
-
-    return results
+    return pd.DataFrame(results_list)
 
 
-def plot_cec_results(results):
-    func_ids = list(results.keys())
-    alg_names = list(results[func_ids[0]].keys())
+# --- Visualization Functions ---
 
-    # Mean performance
-    plt.figure(figsize=(12, 6))
-    for alg_name in alg_names:
-        means = [results[f][alg_name]["mean"] for f in func_ids]
-        plt.semilogy(func_ids, means, label=alg_name, marker="o")
-
-    plt.title("Mean Performance on CEC2022 Functions")
-    plt.xlabel("Function ID")
-    plt.ylabel("Mean Function Value (log scale)")
-    plt.xticks(func_ids)
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("cec_mean_performance.png", dpi=300)
-    plt.show()
-
-    for func_id in func_ids:
-        plt.figure(figsize=(10, 6))
+def plot_convergence_curves(df, path='plots_new/'):
+    """Plots the average convergence curve for each algorithm on each function."""
+    for (func, dim), group in df.groupby(['Function', 'Dimension']):
+        plt.figure(figsize=(12, 8))
         
-        data = [results[func_id][alg_name]["all_results"] for alg_name in alg_names]
-        
-        plt.boxplot(data, tick_labels=alg_names)
-        plt.title(f"Statistical Comparison on Function F{func_id}")
-        plt.ylabel("Function Value")
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(f"cec_boxplot_f{func_id}.png", dpi=300)
-        plt.show()
+        for alg in group['Algorithm'].unique():
+            alg_df = group[group['Algorithm'] == alg]
+            # Stack all convergence curves for this alg and compute the mean
+            curves = np.vstack(alg_df['ConvergenceCurve'].values)
+            mean_curve = np.mean(curves, axis=0)
+            std_curve = np.std(curves, axis=0)
+            
+            iterations = np.arange(len(mean_curve))
+            plt.plot(iterations, mean_curve, label=alg)
+            plt.fill_between(iterations, mean_curve - std_curve, mean_curve + std_curve, alpha=0.2)
 
-    for func_id in func_ids:
-        plt.figure(figsize=(10, 6))
-        for alg_name in alg_names:
-            convergence = results[func_id][alg_name]["convergence"]
-            plt.semilogy(range(len(convergence)), convergence, label=alg_name)
-
-        plt.title(f"Convergence on Function F{func_id}")
-        plt.xlabel("Iterations")
-        plt.ylabel("Function Value (log scale)")
-        plt.grid(True)
+        plt.title(f'Convergence Curve for {func} ({dim}D)')
+        plt.xlabel('Iteration')
+        plt.ylabel('Best Fitness (Log Scale)')
+        plt.yscale('log')
         plt.legend()
+        plt.grid(True, which="both", ls="--")
+        plt.savefig(f'{path}convergence_{func}_{dim}D.png', dpi=300)
+        plt.close()
+
+def plot_boxplots(df, path='plots_new/'):
+    """Creates box plots of the final best fitness for each algorithm and function."""
+    for dim in df['Dimension'].unique():
+        plt.figure(figsize=(16, 10))
+        dim_df = df[df['Dimension'] == dim]
+        
+        sns.boxplot(x='Function', y='BestFitness', hue='Algorithm', data=dim_df)
+        
+        plt.title(f'Final Fitness Distribution ({dim}D)')
+        plt.ylabel('Best Fitness (Log Scale)')
+        plt.yscale('log')
+        plt.xticks(rotation=45)
         plt.tight_layout()
-        plt.savefig(f"cec_convergence_f{func_id}.png", dpi=300)
-        plt.show()
+        plt.savefig(f'{path}boxplot_fitness_{dim}D.png', dpi=300)
+        plt.close()
 
+# In benchmark.py
 
-def visualize_optimization_3d(algorithm, benchmark, max_iter=50, func_id=1):
-    # Only works for 2D problems
-    if algorithm.dim != 2:
-        print("3D visualization only works for 2D problems")
+def create_animation(df, func_id, dim, alg_name, path='plots_new/'):
+    """Creates and saves an animation of the swarm's movement for a 2D function."""
+    if dim != 2:
+        # This check was already correct, but good to confirm.
+        # print(f"Animation only available for 2D functions. Skipping for {dim}D.")
         return
 
-    _, _, _, position_history = algorithm.optimize(benchmark, max_iter)
+    # Get the position history from the first run
+    run_data = df[(df['Function'] == f'F{func_id}') & 
+                  (df['Dimension'] == dim) & 
+                  (df['Algorithm'] == alg_name)].iloc[0]
+    
+    position_history = run_data['PositionHistory']
 
-    x = np.linspace(-100, 100, 100)
-    y = np.linspace(-100, 100, 100)
+    # Create a contour plot of the fitness function
+    cec_func_obj = cec2022_func(func_num=func_id)
+    x = np.linspace(-100, 100, 150)
+    y = np.linspace(-100, 100, 150)
     X, Y = np.meshgrid(x, y)
     Z = np.zeros_like(X)
-
+    
+    # --- THIS LOOP IS CORRECTED ---
     for i in range(X.shape[0]):
         for j in range(X.shape[1]):
-            Z[i, j] = benchmark.evaluate(np.array([X[i, j], Y[i, j]]))
-
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection="3d")
-
-    surf = ax.plot_surface(X, Y, Z, cmap="viridis", alpha=0.7, antialiased=True)
-
-    particles = ax.scatter([], [], [], c="red", s=50, label="Particles")
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Function Value")
-    ax.set_title(f"Optimization Process on CEC2022 Function F{func_id}")
-
-    fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
-
-    def update(frame):
-        positions = position_history[frame]
-        z_values = np.array([benchmark.evaluate(pos) for pos in positions])
-        particles._offsets3d = (positions[:, 0], positions[:, 1], z_values)
-        ax.set_title(
-            f"Optimization Process on CEC2022 Function F{func_id} - Iteration {frame}"
-        )
-        return (particles,)
-
-    ani = FuncAnimation(
-        fig, update, frames=len(position_history), interval=200, blit=True
-    )
-
-    ani.save(f"optimization_3d_f{func_id}.mp4", writer="ffmpeg", fps=5, dpi=300)
-
-    plt.show()
-
-
-def visualize_optimization_2d(algorithm, benchmark, max_iter=50, func_id=1):
-    # Only works for 2D problems
-    if algorithm.dim != 2:
-        print("2D visualization only works for 2D problems")
-        return
-
-    _, _, fitness_history, position_history = algorithm.optimize(benchmark, max_iter)
-
-    x = np.linspace(-100, 100, 100)
-    y = np.linspace(-100, 100, 100)
-    X, Y = np.meshgrid(x, y)
-    Z = np.zeros_like(X)
-
-    for i in range(X.shape[0]):
-        for j in range(X.shape[1]):
-            Z[i, j] = benchmark.evaluate(np.array([X[i, j], Y[i, j]]))
+            pos = np.array([X[i, j], Y[i, j]])
+            # Call the values method
+            cec_func_obj.values(pos.reshape(-1, 1))
+            # Access the result from the ObjFunc attribute
+            Z[i, j] = cec_func_obj.ObjFunc[0]
+    # --- END OF CORRECTION ---
 
     fig, ax = plt.subplots(figsize=(10, 8))
+    # Using log scale for the contour plot can often reveal more detail
+    contour = ax.contourf(X, Y, Z, levels=np.logspace(np.log10(Z.min()+1e-8), np.log10(Z.max()), 50), cmap='viridis')
+    fig.colorbar(contour, ax=ax, label='Fitness (Log Scale)')
+    
+    ax.set_title(f'Swarm Animation for {alg_name} on F{func_id} (2D)')
+    ax.set_xlabel('x1')
+    ax.set_ylabel('x2')
 
-    contour = ax.contourf(X, Y, Z, 50, cmap="viridis", alpha=0.8)
-    fig.colorbar(contour, ax=ax)
-
-    particles = ax.scatter([], [], c="red", s=50, label="Particles")
-    best_particle = ax.scatter(
-        [], [], c="white", s=100, marker="*", label="Global Best"
-    )
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_title(f"Optimization Process on CEC2022 Function F{func_id}")
+    # Initialize the scatter plot for particles
+    particles_scatter = ax.scatter([], [], c='red', zorder=2, label='Particles')
     ax.legend()
-
-    fitness_text = ax.text(
-        0.02, 0.95, "", transform=ax.transAxes, bbox=dict(facecolor="white", alpha=0.5)
-    )
 
     def update(frame):
         positions = position_history[frame]
-        particles.set_offsets(positions)
+        particles_scatter.set_offsets(positions)
+        ax.set_title(f'Swarm Animation for {alg_name} on F{func_id} (Iteration {frame})')
+        return particles_scatter,
 
-        fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
-        best_idx = np.argmin(fitness_values)
-        best_particle.set_offsets([positions[best_idx]])
+    # Create the animation
+    anim = FuncAnimation(fig, update, frames=len(position_history), blit=True, interval=50)
+    
+    # Save the animation
+    anim_filename = f'{path}animation_{alg_name}_F{func_id}_{dim}D.gif'
+    anim.save(anim_filename, writer='pillow', fps=15)
+    print(f"Saved animation to {anim_filename}")
+    plt.close()
 
-        fitness_text.set_text(
-            f"Iteration: {frame}\nBest Fitness: {fitness_history[frame]:.2e}"
-        )
 
-        return particles, best_particle, fitness_text
+if __name__ == "__main__":
+    # --- Experiment Configuration ---
+    
+    # Select which CEC functions to test (1-12)
+    # Let's start with a few to keep it fast
+    CEC_FUNCTIONS_TO_TEST = [1, 2, 5] 
+    
+    # Select dimensions to test (CEC2022 supports 2, 10, 20)
+    DIMENSIONS_TO_TEST = [2, 10]
+    
+    # Define the algorithms to compare
+    ALGORITHMS_TO_COMPARE = {
+        'APSO': MinimizationAPSO,
+        'SPSO': MinimizationSPSO
+    }
+    
+    # Set experiment parameters
+    NUM_RUNS = 5       # For real results, use 20-30. For testing, 5 is fine.
+    MAX_ITERATIONS = 500
+    NUM_PARTICLES = 30
 
-    ani = FuncAnimation(
-        fig, update, frames=len(position_history), interval=200, blit=True
+    # --- Run the Benchmark ---
+    results_df = run_benchmark(
+        cec_functions=CEC_FUNCTIONS_TO_TEST,
+        dimensions=DIMENSIONS_TO_TEST,
+        algorithms=ALGORITHMS_TO_COMPARE,
+        num_runs=NUM_RUNS,
+        max_iter=MAX_ITERATIONS,
+        num_particles=NUM_PARTICLES
     )
+    
+    # Save raw results to a CSV file for later analysis
+    results_df.to_csv('benchmark_results.csv', index=False)
+    print("\nBenchmark finished. Results saved to benchmark_results.csv")
 
-    ani.save(f"optimization_2d_f{func_id}.mp4", writer="ffmpeg", fps=5, dpi=300)
+    # --- Generate Visualizations ---
+    print("\nGenerating plots...")
+    
+    # Create a version of the dataframe without the large history objects for plotting
+    plotting_df = results_df.drop(columns=['PositionHistory'])
+    
+    plot_convergence_curves(plotting_df)
+    plot_boxplots(plotting_df)
+    
+    print("Plots saved to the 'plots_new' directory.")
 
-    plt.show()
+    # --- Generate Animations (for 2D cases) ---
+    print("\nGenerating animations for 2D functions...")
+    for func_id in CEC_FUNCTIONS_TO_TEST:
+        for alg_name in ALGORITHMS_TO_COMPARE.keys():
+            create_animation(results_df, func_id=func_id, dim=2, alg_name=alg_name)
 
-
-def compare_trajectories(algorithms, benchmark, max_iter=50, func_id=1):
-    # Only works for 2D problems
-    if list(algorithms.values())[0].dim != 2:
-        print("Trajectory comparison only works for 2D problems")
-        return
-
-    x = np.linspace(-100, 100, 100)
-    y = np.linspace(-100, 100, 100)
-    X, Y = np.meshgrid(x, y)
-    Z = np.zeros_like(X)
-
-    for i in range(X.shape[0]):
-        for j in range(X.shape[1]):
-            Z[i, j] = benchmark.evaluate(np.array([X[i, j], Y[i, j]]))
-
-    fig, axes = plt.subplots(1, len(algorithms), figsize=(15, 5))
-    if len(algorithms) == 1:
-        axes = [axes]  # Make it iterable for single algorithm case
-
-    # run optimization for each algorithm
-    for i, (alg_name, algorithm) in enumerate(algorithms.items()):
-        _, _, fitness_history, position_history = algorithm.optimize(
-            benchmark, max_iter
-        )
-
-        contour = axes[i].contourf(X, Y, Z, 50, cmap="viridis", alpha=0.8)  # noqa: F841
-
-        # trajectories of global best
-        global_best_positions = []
-        for frame in range(len(position_history)):
-            positions = position_history[frame]
-            fitness_values = np.array([benchmark.evaluate(pos) for pos in positions])
-            best_idx = np.argmin(fitness_values)
-            global_best_positions.append(positions[best_idx])
-
-        global_best_positions = np.array(global_best_positions)
-        axes[i].plot(
-            global_best_positions[:, 0], global_best_positions[:, 1], "r-", linewidth=2
-        )
-        axes[i].scatter(
-            global_best_positions[-1, 0],
-            global_best_positions[-1, 1],
-            c="white",
-            s=100,
-            marker="*",
-        )
-
-        axes[i].set_xlabel("X")
-        axes[i].set_ylabel("Y")
-        axes[i].set_title(f"{alg_name} on F{func_id}")
-
-    plt.tight_layout()
-    plt.savefig(f"trajectory_comparison_f{func_id}.png", dpi=300)
-    plt.show()
-
-
-def create_performance_heatmap(results):
-    func_ids = list(results.keys())
-    alg_names = list(results[func_ids[0]].keys())
-
-    # create data matrix
-    data = np.zeros((len(alg_names), len(func_ids)))
-    for i, alg_name in enumerate(alg_names):
-        for j, func_id in enumerate(func_ids):
-            data[i, j] = results[func_id][alg_name]["mean"]
-
-    # normalize data for better visualization
-    data_normalized = np.zeros_like(data)
-    for j in range(data.shape[1]):
-        col_min = np.min(data[:, j])
-        col_max = np.max(data[:, j])
-        if col_max > col_min:
-            data_normalized[:, j] = (data[:, j] - col_min) / (col_max - col_min)
-        else:
-            data_normalized[:, j] = 0.5
-
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(
-        data_normalized,
-        annot=True,
-        cmap="viridis",
-        xticklabels=[f"F{f}" for f in func_ids],
-        yticklabels=alg_names,
-    )
-    plt.title("Relative Performance Across Functions (Lower is Better)")
-    plt.tight_layout()
-    plt.savefig("performance_heatmap.png", dpi=300)
-    plt.show()
-
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(
-        data,
-        annot=True,
-        cmap="viridis",
-        fmt=".2e",
-        xticklabels=[f"F{f}" for f in func_ids],
-        yticklabels=alg_names,
-    )
-    plt.title("Mean Function Values Across Functions")
-    plt.tight_layout()
-    plt.savefig("performance_heatmap_values.png", dpi=300)
-    plt.show()
-
-
-def create_radar_chart(results):
-    func_ids = list(results.keys())
-    alg_names = list(results[func_ids[0]].keys())
-
-    data = np.zeros((len(alg_names), len(func_ids)))
-    for i, alg_name in enumerate(alg_names):
-        for j, func_id in enumerate(func_ids):
-            data[i, j] = results[func_id][alg_name]["mean"]
-
-    # normalize data for radar chart
-    data_normalized = np.zeros_like(data)
-    for j in range(data.shape[1]):
-        col_min = np.min(data[:, j])
-        col_max = np.max(data[:, j])
-        if col_max > col_min:
-            # invert normalization so lower values are better
-            data_normalized[:, j] = 1 - (data[:, j] - col_min) / (col_max - col_min)
-        else:
-            data_normalized[:, j] = 0.5
-
-    # radar chart
-    angles = np.linspace(0, 2 * np.pi, len(func_ids), endpoint=False).tolist()
-    angles += angles[:1]  # close the loop
-
-    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True))
-
-    for i, alg_name in enumerate(alg_names):
-        values = data_normalized[i].tolist()
-        values += values[:1]  # close the loop
-        ax.plot(angles, values, linewidth=2, label=alg_name)
-        ax.fill(angles, values, alpha=0.1)
-
-    ax.set_theta_offset(np.pi / 2)
-    ax.set_theta_direction(-1)
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels([f"F{f}" for f in func_ids])
-    ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
-    ax.set_yticklabels(["0", "0.25", "0.5", "0.75", "1"])
-    ax.set_ylim(0, 1)
-
-    plt.legend(loc="upper right", bbox_to_anchor=(0.1, 0.1))
-    plt.title("Algorithm Performance Across Functions (Higher is Better)")
-    plt.tight_layout()
-    plt.savefig("radar_chart.png", dpi=300)
-    plt.show()
-
-
-def plot_function_surface(benchmark, func_id, bounds=(-100, 100), resolution=100):
-    # Only works for 2D problems
-    if benchmark.dim != 2:
-        print("Surface plot only works for 2D problems")
-        return
-
-    # grid for the function surface
-    x = np.linspace(bounds[0], bounds[1], resolution)
-    y = np.linspace(bounds[0], bounds[1], resolution)
-    X, Y = np.meshgrid(x, y)
-    Z = np.zeros_like(X)
-
-    for i in range(resolution):
-        for j in range(resolution):
-            Z[i, j] = benchmark.evaluate(np.array([X[i, j], Y[i, j]]))
-
-    fig = plt.figure(figsize=(12, 10))
-    ax = fig.add_subplot(111, projection="3d")
-
-    surf = ax.plot_surface(
-        X, Y, Z, cmap="viridis", alpha=0.8, linewidth=0, antialiased=True
-    )
-
-    offset = np.min(Z) - 0.1 * (np.max(Z) - np.min(Z))
-    contour = ax.contourf(X, Y, Z, zdir="z", offset=offset, cmap="viridis", alpha=0.5)  # noqa: F841
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Function Value")
-    ax.set_title(f"CEC2022 Function F{func_id} Surface")
-
-    fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
-
-    plt.tight_layout()
-    plt.savefig(f"function_surface_f{func_id}.png", dpi=300)
-    plt.show()
-
-    # 2D contour plot
-    plt.figure(figsize=(10, 8))
-    plt.contourf(X, Y, Z, 50, cmap="viridis")
-    plt.colorbar()
-    plt.xlabel("X")
-    plt.ylabel("Y")
-    plt.title(f"CEC2022 Function F{func_id} Contour")
-    plt.tight_layout()
-    plt.savefig(f"function_contour_f{func_id}.png", dpi=300)
-    plt.show()
-
-
-dim = 10
-func_ids = [1, 2, 3, 4, 5]
-
-apso_cec = APSO_CEC(
-    c1=1.193,
-    c2=1.193,
-    w1=0.675,
-    w2=-0.285,
-    num_particles=30,
-    dim=dim,
-    max_iter=500,
-    T=1,
-)
-
-spso_cec = SPSO_CEC(
-    c1=1.193,
-    c2=1.193,
-    w=0.721,
-    num_particles=30,
-    dim=dim,
-    max_iter=500,
-)
-
-arpso_cec = ARPSO_CEC(
-    c1=1.193,
-    c2=1.193,
-    c3=0,
-    num_particles=30,
-    dim=dim,
-    max_iter=500,
-    sensing_radius=10,
-)
-
-algorithms = {"APSO": apso_cec, "SPSO": spso_cec, "ARPSO": arpso_cec}
-
-results = benchmark_on_cec(algorithms, func_ids=func_ids, dim=dim, runs=5, max_iter=200)
-
-plot_cec_results(results)
-create_performance_heatmap(results)
-create_radar_chart(results)
-
-if dim >= 2:
-    for func_id in func_ids:
-        benchmark_2d = CEC2022Benchmark(func_num=func_id, dim=2)
-
-        plot_function_surface(benchmark_2d, func_id)
-
-        apso_2d = APSO_CEC(
-            c1=apso_cec.c1,
-            c2=apso_cec.c2,
-            w1=apso_cec.w1,
-            w2=apso_cec.w2,
-            num_particles=20,
-            dim=2,
-            max_iter=50,
-            T=apso_cec.T,
-        )
-        visualize_optimization_3d(apso_2d, benchmark_2d, max_iter=50, func_id=func_id)
-
-        visualize_optimization_2d(apso_2d, benchmark_2d, max_iter=50, func_id=func_id)
-
-        algorithms_2d = {
-            "APSO": APSO_CEC(
-                c1=apso_cec.c1,
-                c2=apso_cec.c2,
-                w1=apso_cec.w1,
-                w2=apso_cec.w2,
-                num_particles=20,
-                dim=2,
-                max_iter=50,
-                T=apso_cec.T,
-            ),
-            "SPSO": SPSO_CEC(
-                c1=spso_cec.c1, c2=spso_cec.c2, w=spso_cec.w, num_particles=20, dim=2, max_iter=50
-            ),
-            "ARPSO": ARPSO_CEC(
-                c1=arpso_cec.c1,
-                c2=arpso_cec.c2,
-                c3=arpso_cec.c3,
-                num_particles=20,
-                dim=2,
-                max_iter=50,
-                sensing_radius=arpso_cec.sensing_radius,
-            ),
-        }
-        compare_trajectories(algorithms_2d, benchmark_2d, max_iter=50, func_id=func_id)
+    print("\nAll tasks complete.")
